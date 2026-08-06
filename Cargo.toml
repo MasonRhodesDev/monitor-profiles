@@ -2,7 +2,7 @@
 name = "monitor-profiles"
 version = "0.1.0"
 edition = "2024"
-license = "GPL-3.0-only"
+license = "MIT"
 repository = "https://github.com/MasonRhodesDev/monitor-profiles"
 description = "Neutral monitor layout profiles: match connected displays, resolve geometry"
 publish = false

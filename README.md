@@ -85,4 +85,4 @@ The `hyprland-render` feature generates Hyprland artifacts and is off by default
 
 ## License
 
-GPL-3.0-only.
+MIT.
