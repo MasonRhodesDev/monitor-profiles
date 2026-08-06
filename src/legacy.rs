@@ -106,17 +106,45 @@ pub fn parse_conf_monitors(text: &str) -> (Vec<Monitor>, Vec<String>) {
             warnings.push(format!("unparseable monitor line {t:?}"));
             continue;
         }
-        let Some(mode) = Mode::parse(p[1]) else {
-            warnings.push(format!("unparseable monitor mode {:?}", p[1]));
-            continue;
+        // Hyprland accepts keywords where a value is expected: `preferred`
+        // / `highres` / `highrr` for the mode, `auto*` for position, and
+        // `auto` for scale. They mean "let the compositor decide", which is
+        // exactly what None means here — rejecting the line instead would
+        // silently drop the whole monitor (it did: two real profiles
+        // migrated to zero monitors before this was handled).
+        let mode = match p[1] {
+            "preferred" | "highres" | "highrr" => None,
+            other => match Mode::parse(other) {
+                Some(mode) => Some(mode),
+                None => {
+                    warnings.push(format!("unparseable monitor mode {other:?}"));
+                    continue;
+                }
+            },
         };
-        let Some((xs, ys)) = p[2].split_once('x') else {
-            warnings.push(format!("unparseable monitor position {:?}", p[2]));
-            continue;
+        let position = if p[2].starts_with("auto") {
+            None
+        } else {
+            let Some((xs, ys)) = p[2].split_once('x') else {
+                warnings.push(format!("unparseable monitor position {:?}", p[2]));
+                continue;
+            };
+            let (Ok(x), Ok(y)) = (xs.parse::<i32>(), ys.parse::<i32>()) else {
+                warnings.push(format!("unparseable monitor position {:?}", p[2]));
+                continue;
+            };
+            Some((x, y))
         };
-        let (Ok(x), Ok(y), Ok(scale)) = (xs.parse(), ys.parse(), p[3].parse()) else {
-            warnings.push(format!("unparseable monitor geometry {rhs:?}"));
-            continue;
+        let scale = if p[3] == "auto" {
+            1.0
+        } else {
+            match p[3].parse() {
+                Ok(scale) => scale,
+                Err(_) => {
+                    warnings.push(format!("unparseable monitor scale {:?}", p[3]));
+                    continue;
+                }
+            }
         };
         let mut transform = 0;
         if p.len() >= 6 && p[4] == "transform" {
@@ -127,9 +155,9 @@ pub fn parse_conf_monitors(text: &str) -> (Vec<Monitor>, Vec<String>) {
         }
         out.push(Monitor {
             output: p[0].into(),
-            mode: Some(mode),
+            mode,
             scale,
-            position: Some((x, y)),
+            position,
             transform,
             enabled: true,
         })
@@ -280,6 +308,30 @@ mod tests {
         assert_eq!(m[0].scale, 1.5);
         assert!(!m[1].enabled)
     }
+    #[test]
+    fn conf_body_accepts_hyprland_keywords() {
+        // Real profile line from the reference machine: scale `auto`. A
+        // strict numeric parse dropped the monitor entirely and the whole
+        // profile migrated empty.
+        let text = "monitor = desc:Dell Inc. DELL S3422DWG HSRTS63,3440x1440@144,0x0,auto";
+        let (mons, warns) = parse_conf_monitors(text);
+        assert_eq!(mons.len(), 1, "keyword scale must not drop the monitor");
+        assert!(warns.is_empty(), "{warns:?}");
+        assert_eq!(mons[0].scale, 1.0);
+        assert_eq!(mons[0].position, Some((0, 0)));
+        assert_eq!(mons[0].mode.map(|m| m.width), Some(3440));
+    }
+
+    #[test]
+    fn conf_body_accepts_preferred_and_auto_position() {
+        let (mons, warns) = parse_conf_monitors("monitor = eDP-2,preferred,auto,1.25");
+        assert_eq!(mons.len(), 1);
+        assert!(warns.is_empty(), "{warns:?}");
+        assert_eq!(mons[0].mode, None, "preferred means the compositor picks");
+        assert_eq!(mons[0].position, None, "auto position is row-derived");
+        assert_eq!(mons[0].scale, 1.25);
+    }
+
     #[test]
     fn conf_body_reads_transform() {
         assert_eq!(
