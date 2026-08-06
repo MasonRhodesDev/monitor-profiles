@@ -1,0 +1,18 @@
+[package]
+name = "monitor-profiles"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-only"
+repository = "https://github.com/MasonRhodesDev/monitor-profiles"
+description = "Neutral monitor layout profiles: match connected displays, resolve geometry"
+publish = false
+
+[features]
+default = []
+# Hyprland config generation. Off by default so consumers that only READ
+# profiles (a login screen) never compile compositor-specific code.
+hyprland-render = []
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+toml = { version = "0.9", default-features = false, features = ["parse", "serde"] }
