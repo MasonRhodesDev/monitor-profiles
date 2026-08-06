@@ -143,6 +143,12 @@ pub fn load_dir(dir: &Path) -> (Vec<Profile>, Vec<Diagnostic>) {
     let (mut ps, mut ds) = (vec![], vec![]);
     let entries = match std::fs::read_dir(dir) {
         Ok(x) => x,
+        // An absent directory is not a fault: it is what "no profiles
+        // configured" looks like on a machine where nothing ships them. Only
+        // a directory that exists but cannot be read is worth a diagnostic --
+        // consumers poll this path on every run and would otherwise warn
+        // forever about a file the user never asked for.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return (ps, ds),
         Err(e) => {
             ds.push(Diagnostic {
                 source: dir.display().to_string(),
@@ -201,6 +207,7 @@ pub fn load_dir(dir: &Path) -> (Vec<Profile>, Vec<Diagnostic>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::PermissionsExt;
     const FULL: &str = r#"description="d"
 match=["A","B"]
 edp="disable"
@@ -267,6 +274,17 @@ default=true
         assert!(from_toml("n", "match=[\"A\"]\nbogus=1").is_err())
     }
     #[test]
+    fn absent_directory_is_silent_not_a_diagnostic() {
+        let missing = std::path::Path::new("/nonexistent/monitor-profiles-absent");
+        let (profiles, diagnostics) = load_dir(missing);
+        assert!(profiles.is_empty());
+        assert!(
+            diagnostics.is_empty(),
+            "a missing dir must not warn on every run: {diagnostics:?}"
+        );
+    }
+
+    #[test]
     fn load_dir_keeps_good_skips_bad() {
         let d = std::env::temp_dir().join(format!("monitor-profiles-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
@@ -283,12 +301,26 @@ default=true
         std::fs::remove_dir_all(d).unwrap()
     }
     #[test]
-    fn load_dir_missing_directory_is_a_diagnostic() {
-        let d =
-            std::env::temp_dir().join(format!("monitor-profiles-missing-{}", std::process::id()));
+    /// A directory that exists but cannot be read is a real fault worth
+    /// reporting -- unlike one that simply is not there, which is the
+    /// ordinary state on a machine that ships no profiles.
+    fn load_dir_unreadable_directory_is_a_diagnostic() {
+        let d = std::env::temp_dir().join(format!(
+            "monitor-profiles-unreadable-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        // Strip every permission bit so read_dir fails with something other
+        // than NotFound. Skipped when running as root, which ignores them.
+        std::fs::set_permissions(&d, PermissionsExt::from_mode(0o000)).unwrap();
         let (p, x) = load_dir(&d);
+        let running_as_root = x.is_empty();
+        let _ = std::fs::set_permissions(&d, PermissionsExt::from_mode(0o755));
+        let _ = std::fs::remove_dir_all(&d);
         assert!(p.is_empty());
-        assert_eq!(x.len(), 1)
+        if !running_as_root {
+            assert_eq!(x.len(), 1);
+        }
     }
 }
