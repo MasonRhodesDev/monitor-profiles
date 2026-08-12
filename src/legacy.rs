@@ -59,7 +59,16 @@ pub fn to_profile(name: &str, text: &str) -> Result<(Profile, Vec<String>), Stri
     }
     let (mut monitors, mut body_warnings) = parse_conf_monitors(text);
     if monitors.is_empty() {
-        (monitors, body_warnings) = parse_mon_row(text)
+        (monitors, body_warnings) = parse_mon_row(text);
+        if monitors.is_empty() {
+            // The other Lua dialect: explicit per-monitor calls, used when a
+            // row cannot express the arrangement.
+            let (hl, mut hl_warnings) = parse_hl_monitor(text);
+            if !hl.is_empty() {
+                monitors = hl;
+                body_warnings.append(&mut hl_warnings);
+            }
+        }
     }
     warnings.append(&mut body_warnings);
     if monitors.is_empty() {
@@ -176,6 +185,94 @@ fn field<'a>(group: &'a str, key: &str) -> Option<&'a str> {
     s = s.strip_prefix('=')?.trim_start();
     Some(s.split([',', '\n', '}']).next()?.trim().trim_matches('"'))
 }
+/// `hl.monitor({ output = ..., mode = "WxH@Hz", position = "XxY", scale = ..,
+/// transform = .. })` — one call per monitor, with explicit geometry.
+///
+/// The counterpart to [`parse_mon_row`], which derives positions by laying
+/// monitors out in a row. A profile reaches for this form precisely when the
+/// row is wrong: a portrait monitor centred against a shorter one cannot be
+/// expressed as a row, so the positions are written out.
+pub fn parse_hl_monitor(text: &str) -> (Vec<Monitor>, Vec<String>) {
+    let mut out = vec![];
+    let mut warnings = vec![];
+    let mut rest = text;
+    while let Some(start) = rest.find("hl.monitor(") {
+        let tail = &rest[start + "hl.monitor(".len()..];
+        let Some(open) = tail.find('{') else {
+            rest = tail;
+            continue;
+        };
+        let Some(close) = tail[open..].find('}') else {
+            rest = tail;
+            continue;
+        };
+        let group = &tail[open + 1..open + close];
+        rest = &tail[open + close..];
+
+        let Some(output) = field(group, "output") else {
+            warnings.push("hl.monitor without an output".into());
+            continue;
+        };
+        if field(group, "disable").is_some_and(|v| v == "true") {
+            out.push(Monitor {
+                output: output.into(),
+                enabled: false,
+                ..Monitor::default()
+            });
+            continue;
+        }
+        // Keywords mean "let the compositor decide", same as the conf dialect.
+        let mode = match field(group, "mode") {
+            None | Some("preferred") | Some("highres") | Some("highrr") => None,
+            Some(raw) => match Mode::parse(raw) {
+                Some(mode) => Some(mode),
+                None => {
+                    warnings.push(format!("unparseable hl.monitor mode {raw:?}"));
+                    continue;
+                }
+            },
+        };
+        let position = match field(group, "position") {
+            None => None,
+            Some(raw) if raw.starts_with("auto") => None,
+            Some(raw) => match raw.split_once('x') {
+                Some((x, y)) => match (x.trim().parse::<i32>(), y.trim().parse::<i32>()) {
+                    (Ok(x), Ok(y)) => Some((x, y)),
+                    _ => {
+                        warnings.push(format!("unparseable hl.monitor position {raw:?}"));
+                        continue;
+                    }
+                },
+                None => {
+                    warnings.push(format!("unparseable hl.monitor position {raw:?}"));
+                    continue;
+                }
+            },
+        };
+        let scale = match field(group, "scale") {
+            None | Some("auto") => 1.0,
+            Some(raw) => match raw.parse() {
+                Ok(scale) => scale,
+                Err(_) => {
+                    warnings.push(format!("unparseable hl.monitor scale {raw:?}"));
+                    continue;
+                }
+            },
+        };
+        out.push(Monitor {
+            output: output.into(),
+            mode,
+            scale,
+            position,
+            transform: field(group, "transform")
+                .and_then(|x| x.parse().ok())
+                .unwrap_or(0),
+            enabled: true,
+        })
+    }
+    (out, warnings)
+}
+
 pub fn parse_mon_row(text: &str) -> (Vec<Monitor>, Vec<String>) {
     let Some(start) = text.find("mon.row(") else {
         return (vec![], vec![]);
@@ -308,6 +405,39 @@ mod tests {
         assert_eq!(m[0].scale, 1.5);
         assert!(!m[1].enabled)
     }
+    /// Shape taken from a real profile: a portrait monitor centred against a
+    /// shorter one, which is exactly the arrangement `mon.row` cannot express
+    /// -- so the positions are written out and the row parser finds nothing.
+    #[test]
+    fn lua_body_reads_explicit_hl_monitor_calls() {
+        let text = r#"
+-- Profile: HP rotated portrait (left) + Dell (middle) + panel (right).
+--@ match = desc:HP Inc. HP E243 CNK7510Y4B
+hl.monitor({ output = "desc:HP Inc. HP E243 CNK7510Y4B",  mode = "1920x1080@60",  position = "0x0",      scale = 1,    transform = 1 })
+hl.monitor({ output = "desc:Dell Inc. DELL S2721HGF 85YF", mode = "1920x1080@144", position = "1080x420", scale = 1 })
+hl.monitor({ output = "eDP-2",                             mode = "2560x1600@165", position = "3000x420", scale = 1.25 })
+"#;
+        let (profile, warnings) = to_profile("hp-portrait", text).unwrap();
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(profile.monitors.len(), 3, "all three monitors must parse");
+
+        let hp = &profile.monitors[0];
+        assert_eq!(hp.transform, 1, "the portrait rotation must survive");
+        assert_eq!(hp.position, Some((0, 0)));
+        assert_eq!(hp.mode.map(|m| m.refresh), Some(60.0));
+
+        let dell = &profile.monitors[1];
+        assert_eq!(
+            dell.position,
+            Some((1080, 420)),
+            "the y offset is the whole reason this profile is not a row"
+        );
+        assert_eq!(dell.mode.map(|m| m.refresh), Some(144.0));
+
+        assert_eq!(profile.monitors[2].scale, 1.25);
+        assert_eq!(profile.monitors[2].position, Some((3000, 420)));
+    }
+
     #[test]
     fn conf_body_accepts_hyprland_keywords() {
         // Real profile line from the reference machine: scale `auto`. A
