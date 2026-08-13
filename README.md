@@ -79,9 +79,30 @@ if let Some(profile) = select(&signature, &profiles) {
 
 The `hyprland-render` feature generates Hyprland artifacts and is off by default.
 
+## Writing
+
+`to_toml(&Profile) -> String` is the canonical serializer. TOML under
+`/etc/monitor-profiles/` (shared) and optional `~/.config/hypr/profiles/*.toml`
+(per-user overrides) is the only hand-edited source of truth. Generated
+`.lua`/`.conf` are Hyprland apply artifacts — do not edit them.
+
+## CLI
+
+```sh
+cargo build --release --features cli
+./target/release/monitor-profiles list
+./target/release/monitor-profiles validate /etc/monitor-profiles
+./target/release/monitor-profiles show ultrawide-with-secondary
+./target/release/monitor-profiles migrate path/to/legacy.lua
+./target/release/monitor-profiles render ultrawide-with-secondary
+```
+
 ## Migration
 
-`legacy::to_profile` reads the old `#@` and `--@` directive dialects. `.conf` bodies convert cleanly; `mon.row` Lua bodies convert through a best-effort scan. Any other Lua body must be converted by hand.
+`legacy::to_profile` converts old `#@` / `--@` dialect files **once**. It is
+deprecated as a profile *source* — after migrate, edit TOML only. `.conf`
+bodies convert cleanly; `mon.row` / `hl.monitor` Lua bodies convert through
+a best-effort scan.
 
 ## License
 

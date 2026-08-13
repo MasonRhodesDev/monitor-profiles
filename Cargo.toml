@@ -12,7 +12,15 @@ default = []
 # Hyprland config generation. Off by default so consumers that only READ
 # profiles (a login screen) never compile compositor-specific code.
 hyprland-render = []
+# CLI config tool (list/show/validate/migrate/render).
+cli = ["dep:clap", "hyprland-render"]
+
+[[bin]]
+name = "monitor-profiles"
+path = "src/bin/monitor-profiles.rs"
+required-features = ["cli"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 toml = { version = "0.9", default-features = false, features = ["parse", "serde"] }
+clap = { version = "4", features = ["derive"], optional = true }

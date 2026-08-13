@@ -1,4 +1,9 @@
-//! Best-effort migration from legacy Hyprland profiles.
+//! Best-effort migration from legacy Hyprland `.conf`/`.lua` profiles.
+//!
+//! **Deprecated as a profile source.** Hand-edited dialect files are no
+//! longer the source of truth — convert once with [`to_profile`] (or the
+//! `monitor-profiles migrate` CLI) into TOML, then edit the TOML. This
+//! module remains for one-shot migration only.
 use crate::model::{EdpPolicy, GpuPref, Mode, Monitor, Profile, WorkspaceRule};
 pub fn parse_directive(line: &str, allow_hyphen: bool) -> Option<(&str, &str)> {
     let rest = line

@@ -6,6 +6,10 @@
 //! screen must be able to produce the same arrangement without sharing a
 //! compositor, or a config dialect, between them.
 //!
+//! TOML is the only hand-edited source of truth. Write with [`to_toml`];
+//! Hyprland `.lua`/`.conf` are render artifacts ([`render`], feature
+//! `hyprland-render`). [`legacy`] converts old dialect files once.
+//!
 //! Everything here is pure except [`parse::load_dir`]. This crate feeds a
 //! login screen: a malformed profile is skipped with a diagnostic, never a
 //! panic and never a failed load.
@@ -15,6 +19,7 @@ pub mod legacy;
 pub mod matching;
 pub mod model;
 pub mod parse;
+pub mod serialize;
 #[cfg(feature = "hyprland-render")]
 pub mod render;
 
@@ -24,3 +29,5 @@ pub use layout::{
 pub use matching::{match_in_signature, select};
 pub use model::{EdpPolicy, GpuPref, Mode, Monitor, Profile, WorkspaceRule};
 pub use parse::{Diagnostic, from_toml, load_dir};
+pub use serialize::to_toml;
+
