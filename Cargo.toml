@@ -9,8 +9,9 @@ publish = false
 
 [features]
 default = []
-# Hyprland config generation. Off by default so consumers that only READ
-# profiles (a login screen) never compile compositor-specific code.
+# Hyprland adapter: generate `.lua`/`.conf` and parse legacy dialect files.
+# Off by default so consumers that only READ profiles (a login screen) never
+# compile compositor-specific syntax. Default parse/serialize stay TOML-only.
 hyprland-render = []
 # CLI config tool (list/show/validate/migrate/render).
 cli = ["dep:clap", "hyprland-render"]

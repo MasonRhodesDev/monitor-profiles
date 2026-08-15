@@ -8,18 +8,20 @@
 //!
 //! TOML is the only hand-edited source of truth. Write with [`to_toml`];
 //! Hyprland `.lua`/`.conf` are render artifacts ([`render`], feature
-//! `hyprland-render`). [`legacy`] converts old dialect files once.
+//! `hyprland-render`). [`legacy`] converts old dialect files once and is
+//! compiled only with that feature, so the default library stays TOML-only.
 //!
 //! Everything here is pure except [`parse::load_dir`]. This crate feeds a
 //! login screen: a malformed profile is skipped with a diagnostic, never a
 //! panic and never a failed load.
 
 pub mod layout;
-pub mod legacy;
 pub mod matching;
 pub mod model;
 pub mod parse;
 pub mod serialize;
+#[cfg(feature = "hyprland-render")]
+pub mod legacy;
 #[cfg(feature = "hyprland-render")]
 pub mod render;
 

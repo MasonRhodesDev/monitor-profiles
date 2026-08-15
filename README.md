@@ -77,7 +77,9 @@ if let Some(profile) = select(&signature, &profiles) {
 }
 ```
 
-The `hyprland-render` feature generates Hyprland artifacts and is off by default.
+The `hyprland-render` feature is the Hyprland adapter: it generates apply
+artifacts and compiles the one-shot `legacy` migrator. It is off by default
+so the default library parse/serialize stay TOML-only.
 
 ## Writing
 
@@ -99,10 +101,10 @@ cargo build --release --features cli
 
 ## Migration
 
-`legacy::to_profile` converts old `#@` / `--@` dialect files **once**. It is
-deprecated as a profile *source* — after migrate, edit TOML only. `.conf`
-bodies convert cleanly; `mon.row` / `hl.monitor` Lua bodies convert through
-a best-effort scan.
+`legacy::to_profile` (feature `hyprland-render`) converts old `#@` / `--@`
+dialect files **once**. It is deprecated as a profile *source* — after
+migrate, edit TOML only. `.conf` bodies convert cleanly; `mon.row` /
+`hl.monitor` Lua bodies convert through a best-effort scan.
 
 ## License
 

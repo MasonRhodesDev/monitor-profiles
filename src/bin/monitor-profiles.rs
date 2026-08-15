@@ -37,7 +37,8 @@ enum Cmd {
     },
     /// Convert a legacy `.conf`/`.lua` file to TOML on stdout.
     Migrate { path: PathBuf },
-    /// Emit Hyprland lua and conf for a named profile (debug/CI).
+    /// Emit Hyprland apply artifacts (lua/conf) for a named TOML profile.
+    /// Adapter output, not a source format — edit the TOML.
     Render { name: String },
 }
 
