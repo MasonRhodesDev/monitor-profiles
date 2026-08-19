@@ -128,6 +128,39 @@ pub struct Profile {
     pub workspaces: Vec<WorkspaceRule>,
 }
 
+/// Stable identity shared by profile producers and consumers.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MonitorIdentity {
+    pub connector: String,
+    pub description: Option<String>,
+}
+
+impl MonitorIdentity {
+    pub fn new(connector: impl Into<String>, description: Option<String>) -> Self {
+        let connector = connector.into();
+        let description = description.and_then(|value| {
+            let value = value.trim();
+            if value.is_empty() {
+                return None;
+            }
+            let suffix = format!(" ({connector})");
+            Some(value.strip_suffix(&suffix).unwrap_or(value).to_owned())
+        });
+        Self {
+            connector,
+            description,
+        }
+    }
+
+    pub fn selectors(&self) -> impl Iterator<Item = String> + '_ {
+        std::iter::once(self.connector.clone()).chain(
+            self.description
+                .as_ref()
+                .map(|value| format!("desc:{value}")),
+        )
+    }
+}
+
 pub fn fmt_num(v: f64) -> String {
     let s = format!("{v:.2}");
     s.trim_end_matches('0').trim_end_matches('.').to_string()
@@ -174,5 +207,19 @@ mod tests {
         assert_eq!(fmt_num(165.0), "165");
         assert_eq!(fmt_num(1.25), "1.25");
         assert_eq!(fmt_num(1.5), "1.5");
+    }
+
+    #[test]
+    fn identity_normalizes_compositor_connector_suffix() {
+        let identity =
+            MonitorIdentity::new("DP-4", Some("HP Inc. HP E243 CNK7510Y4B (DP-4)".into()));
+        assert_eq!(
+            identity.description.as_deref(),
+            Some("HP Inc. HP E243 CNK7510Y4B")
+        );
+        assert_eq!(
+            identity.selectors().collect::<Vec<_>>(),
+            vec!["DP-4", "desc:HP Inc. HP E243 CNK7510Y4B"]
+        );
     }
 }

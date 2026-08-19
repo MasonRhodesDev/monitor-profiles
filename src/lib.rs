@@ -28,8 +28,8 @@ pub mod render;
 pub use layout::{
     ConnectedOutput, ResolvedLayout, ResolvedOutput, resolve, resolve_all, valid_scale,
 };
-pub use matching::{match_in_signature, select};
-pub use model::{EdpPolicy, GpuPref, Mode, Monitor, Profile, WorkspaceRule};
+pub use matching::{match_in_signature, select, select_by};
+pub use model::{EdpPolicy, GpuPref, Mode, Monitor, MonitorIdentity, Profile, WorkspaceRule};
 pub use parse::{Diagnostic, from_toml, load_dir};
 pub use serialize::to_toml;
 

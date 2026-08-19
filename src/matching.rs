@@ -5,11 +5,25 @@ pub fn match_in_signature(m: &str, signature: &[String]) -> bool {
     signature.iter().any(|d| d.starts_with(needle))
 }
 pub fn select<'a>(signature: &[String], profiles: &'a [Profile]) -> Option<&'a Profile> {
+    select_by(signature, profiles, |p| (&p.matches, p.priority, &p.name))
+}
+
+pub fn select_by<'a, T, F>(signature: &[String], profiles: &'a [T], fields: F) -> Option<&'a T>
+where
+    F: Fn(&T) -> (&[String], i64, &str),
+{
     profiles
         .iter()
-        .filter(|p| p.matches.iter().all(|m| match_in_signature(m, signature)))
+        .filter(|profile| {
+            fields(profile)
+                .0
+                .iter()
+                .all(|m| match_in_signature(m, signature))
+        })
         .max_by(|a, b| {
-            (a.priority, a.matches.len(), &a.name).cmp(&(b.priority, b.matches.len(), &b.name))
+            let (am, ap, an) = fields(a);
+            let (bm, bp, bn) = fields(b);
+            (ap, am.len(), an).cmp(&(bp, bm.len(), bn))
         })
 }
 
