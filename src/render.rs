@@ -96,17 +96,18 @@ pub fn render_lua(profile: &Profile) -> (String, Vec<String>) {
             } else {
                 "auto".into()
             };
+            // transform is always explicit: hyprstate applies profiles with
+            // `hyprctl eval dofile(..)`, and hl.monitor merges into any earlier
+            // rule with the same output name, so an omitted field inherits a
+            // stale value from a previously applied profile.
             s.push_str(&format!(
-                "hl.monitor({{ output = {:?}, mode = {:?}, position = {:?}, scale = {:?}",
+                "hl.monitor({{ output = {:?}, mode = {:?}, position = {:?}, scale = {:?}, transform = {} }})\n",
                 o.selector,
                 mode,
                 pos,
-                fmt_num(o.scale)
-            ));
-            if o.transform != 0 {
-                s.push_str(&format!(", transform = {}", o.transform))
-            }
-            s.push_str(" })\n")
+                fmt_num(o.scale),
+                o.transform
+            ))
         }
     }
     if !profile.workspaces.is_empty() {
@@ -163,8 +164,8 @@ mod tests {
     fn render_lua_dual_4k_matches_expected() {
         let (s, _) = render_lua(&dual());
         assert!(s.contains("--@ match = desc:Dell Inc. DELL S2725QC 5DGMS84"));
-        assert!(s.contains(r#"hl.monitor({ output = "desc:Dell Inc. DELL S2725QC 5DGMS84", mode = "3840x2160@120", position = "0x0", scale = "1.5" })"#));
-        assert!(s.contains(r#"hl.monitor({ output = "eDP-2", mode = "2560x1600@165", position = "5120x0", scale = "1.6" })"#));
+        assert!(s.contains(r#"hl.monitor({ output = "desc:Dell Inc. DELL S2725QC 5DGMS84", mode = "3840x2160@120", position = "0x0", scale = "1.5", transform = 0 })"#));
+        assert!(s.contains(r#"hl.monitor({ output = "eDP-2", mode = "2560x1600@165", position = "5120x0", scale = "1.6", transform = 0 })"#));
         assert!(s.contains(r#"hl.workspace_rule({ workspace = "1", monitor = "desc:Dell Inc. DELL S2725QC 5DGMS84", default = true })"#))
     }
     #[test]
@@ -174,6 +175,18 @@ mod tests {
                 .0
                 .contains("monitor = eDP-2,2560x1600@165,5120x0,1.6")
         )
+    }
+    #[test]
+    fn render_lua_always_emits_transform() {
+        let mut p = dual();
+        p.monitors[0].transform = 3;
+        let (s, _) = render_lua(&p);
+        assert!(s.contains(r#"scale = "1.5", transform = 3 })"#));
+        let unrotated = s
+            .lines()
+            .find(|l| l.contains("FFJMS84") && l.starts_with("hl.monitor"))
+            .unwrap();
+        assert!(unrotated.contains("transform = 0"), "{unrotated}")
     }
     #[test]
     fn render_conf_transform_and_disabled() {
